@@ -1,0 +1,5 @@
+# Compose 2.24.4+; replace port 80 instead of appending another published port.
+services:
+  nginx:
+    ports: !override
+      - "127.0.0.1:${PHASE3_HTTP_PORT:-8083}:80"

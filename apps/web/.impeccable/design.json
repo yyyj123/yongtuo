@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-07",
+  "title": "Design System: YONGTUO public website",
+  "extensions": {
+    "breakpoints": [
+      {
+        "name": "navigation",
+        "value": "1100px"
+      },
+      {
+        "name": "filters",
+        "value": "768px"
+      },
+      {
+        "name": "mobile-search",
+        "value": "600px"
+      }
+    ],
+    "shadows": [
+      {
+        "name": "navigation",
+        "value": "0 18px 30px #0c23341f",
+        "purpose": "Open navigation only"
+      },
+      {
+        "name": "service entrance",
+        "value": "0 2px 18px #29303614",
+        "purpose": "Circular reference-style navigation entrance"
+      }
+    ],
+    "motion": [],
+    "layoutReference": {
+      "url": "https://www.orieno.com.tw/",
+      "approved": "2026-09-07",
+      "scope": "Homepage composition and shared header/footer",
+      "palette": "Existing YONGTUO navy palette retained per explicit user correction",
+      "media": "Only approved API media; no copied reference assets"
+    }
+  },
+  "components": []
+}

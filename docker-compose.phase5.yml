@@ -1,0 +1,10 @@
+services:
+  web:
+    build:
+      args:
+        NUXT_IMAGE_DOMAINS: ${NUXT_IMAGE_DOMAINS:-}
+    environment:
+      NUXT_PUBLIC_SITE_URL: ${PUBLIC_SITE_URL:-http://localhost:8085}
+  nginx:
+    ports: !override
+      - "127.0.0.1:${PHASE5_HTTP_PORT:-8085}:80"

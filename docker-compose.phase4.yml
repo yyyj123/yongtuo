@@ -1,0 +1,4 @@
+services:
+  nginx:
+    ports: !override
+      - "127.0.0.1:${PHASE4_HTTP_PORT:-8084}:80"

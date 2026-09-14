@@ -1,0 +1,66 @@
+services:
+  web:
+    build:
+      context: ./apps/web
+    restart: unless-stopped
+    environment:
+      NUXT_PUBLIC_API_BASE: ${NUXT_PUBLIC_API_BASE:-/api/v1}
+
+  admin:
+    build:
+      context: ./apps/admin
+    restart: unless-stopped
+
+  api:
+    build:
+      context: ./apps/api
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: local
+      SPRING_DATASOURCE_URL: jdbc:mysql://${DB_HOST:-mysql}:3306/${DB_NAME:-yongtuo}
+      SPRING_DATASOURCE_USERNAME: ${DB_USER:-yongtuo}
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-change-me}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?JWT_ACCESS_SECRET is required}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET is required}
+    depends_on:
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8080/actuator/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  mysql:
+    image: mysql:8.0.45
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${DB_NAME:-yongtuo}
+      MYSQL_USER: ${DB_USER:-yongtuo}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-change-me}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-change-me-root}
+    volumes:
+      - mysql_local_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  nginx:
+    image: nginx:1.27.4-alpine
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:80:80"
+    volumes:
+      - ./infra/nginx/local.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      web:
+        condition: service_started
+      admin:
+        condition: service_started
+      api:
+        condition: service_healthy
+
+volumes:
+  mysql_local_data:

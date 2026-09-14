@@ -1,0 +1,31 @@
+{
+  "name": "@yongtuo/web",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24.20.0 <25"
+  },
+  "scripts": {
+    "build": "nuxt build",
+    "test": "nuxt prepare && vitest",
+    "typecheck": "nuxt typecheck"
+  },
+  "devDependencies": {
+    "@nuxt/test-utils": "4.2.0",
+    "@vue/test-utils": "2.5.0",
+    "happy-dom": "20.13.2",
+    "lighthouse": "13.4.1",
+    "nuxt": "3.21.11",
+    "playwright": "1.63.0",
+    "typescript": "5.9.3",
+    "vitest": "4.1.11",
+    "vue-tsc": "3.3.11"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true
+  },
+  "dependencies": {
+    "@fontsource/barlow": "5.3.0",
+    "@nuxt/image": "2.1.0"
+  }
+}

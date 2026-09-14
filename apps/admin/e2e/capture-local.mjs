@@ -1,0 +1,5 @@
+import {chromium} from 'playwright'
+import {readFileSync} from 'node:fs'
+const browser=await chromium.launch({channel:'msedge',headless:true});const page=await browser.newPage({viewport:{width:1440,height:1000}})
+await page.goto('http://localhost:8084/manage/');await page.waitForLoadState('networkidle');await page.screenshot({path:'E:/Codex生成文件/预览/yongtuo-phase4/phase4-login.png'})
+await page.goto('http://127.0.0.1:18084/manage/');await page.getByLabel('用户名',{exact:true}).fill('acceptance');await page.getByLabel('密码',{exact:true}).fill(JSON.parse(readFileSync('.env.acceptance-auth.json','utf8')).password);await page.getByRole('button',{name:'登录',exact:true}).click();await page.waitForURL('**/manage/dashboard');await page.waitForLoadState('networkidle');await page.setViewportSize({width:390,height:844});await page.goto('http://127.0.0.1:18084/manage/products');await page.waitForLoadState('networkidle');await page.screenshot({path:'E:/Codex生成文件/预览/yongtuo-phase4/mobile-products-viewport.png'});await browser.close()

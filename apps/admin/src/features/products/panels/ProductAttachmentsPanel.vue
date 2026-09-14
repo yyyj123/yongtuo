@@ -1,0 +1,15 @@
+<script setup lang="ts">
+import { reactive,toRef,ref,watch } from 'vue'
+import {useDraft} from '../../../shared/draft'
+import { api } from '../../auth/client'
+import { uploadMedia,attachmentPayload,moveImage } from '../media'
+import { confirmAction } from '../../../shared/confirm'
+const props=defineProps<{productId?:number}>(),state=reactive({rows:[] as any[]}),rows=toRef(state,'rows'),loaded=ref(false),busy=ref(false),error=ref(''),message=ref('')
+const draft=useDraft(state,()=>`product.${props.productId}.attachments`)
+watch(()=>props.productId,async id=>{loaded.value=false;rows.value=[];draft.reset();if(!id)return;busy.value=true;try{rows.value=await api.get(`/products/${id}/attachments`);await draft.restore();loaded.value=true}catch(e){error.value=(e as Error).message}finally{busy.value=false}},{immediate:true})
+async function save(){if(!loaded.value)return;busy.value=true;error.value='';try{rows.value=await api.put(`/products/${props.productId}/attachments`,rows.value.map(attachmentPayload));draft.saved();message.value='附件设置已保存。'}catch(e){error.value=(e as Error).message}finally{busy.value=false}}
+async function upload(event:Event){const input=event.target as HTMLInputElement;busy.value=true;error.value='';try{for(const file of Array.from(input.files||[])){const media=await uploadMedia(api,file);rows.value.push({mediaId:media.id,fileName:media.originalName,displayNameZh:media.originalName,displayNameEn:'',isPublic:false,allowDownload:false})}await save()}catch(e){error.value=(e as Error).message}finally{busy.value=false;input.value=''}}
+async function remove(index:number){if(await confirmAction('将从产品中移除此附件，原文件仍保留。','移除附件','移除')){rows.value.splice(index,1);await save()}}
+</script>
+<template><section class="surface"><h2>产品附件</h2><p v-if="!productId" class="muted">先保存产品草稿，再上传附件。</p><template v-else><p class="muted small">PDF 或图片，单个最多 20 MB。公开展示和允许下载是独立设置，上传后默认均关闭。</p><label>选择附件<input type="file" accept="application/pdf,image/jpeg,image/png,image/webp" multiple :disabled="busy||!loaded" @change="upload"></label><p v-if="error" class="error" role="alert">{{error}}</p><p v-if="message" role="status">{{message}}</p>
+<div class="table-scroll"><table><thead><tr><th>名称</th><th>公开</th><th>允许下载</th><th>操作</th></tr></thead><tbody><tr v-for="(row,index) in rows" :key="row.mediaId"><td><div class="form-stack"><label>中文显示名称<input v-model="row.displayNameZh" maxlength="200"></label><label>English name<input v-model="row.displayNameEn" maxlength="200"></label></div><small>{{row.fileName}}</small></td><td><input type="checkbox" v-model="row.isPublic" :aria-label="`公开 ${row.fileName}`"></td><td><input type="checkbox" v-model="row.allowDownload" :aria-label="`允许下载 ${row.fileName}`"></td><td><div class="actions"><button type="button" :disabled="index===0||busy" @click="moveImage(rows,index,-1)">上移</button><button type="button" :disabled="busy||!loaded" @click="remove(index)">移除</button></div></td></tr></tbody></table></div><p v-if="!rows.length" class="muted">暂无附件。</p><el-button :disabled="!loaded" :loading="busy" @click="save">保存附件设置</el-button></template></section></template>

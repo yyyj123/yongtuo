@@ -1,0 +1,11 @@
+# Disposable browser acceptance only. Uses built Phase 4 images with a separate volume.
+services:
+  api:
+    image: yongtuo-phase4-api:latest
+  admin:
+    image: yongtuo-phase4-admin:latest
+  web:
+    image: yongtuo-phase4-web:latest
+  nginx:
+    ports: !override
+      - "127.0.0.1:18084:80"

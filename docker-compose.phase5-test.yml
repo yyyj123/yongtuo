@@ -1,0 +1,7 @@
+services:
+  web:
+    image: yongtuo-phase5-web
+  api:
+    image: yongtuo-phase5-api
+  admin:
+    image: yongtuo-phase5-admin

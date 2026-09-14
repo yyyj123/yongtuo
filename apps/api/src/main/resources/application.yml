@@ -1,0 +1,22 @@
+spring:
+  application:
+    name: yongtuo-api
+  servlet:
+    multipart:
+      # Absolute web ceiling: leaves room for Task 11 multi-file image batches.
+      # ProductImportService keeps the stricter per-workbook 5 MB limit.
+      max-file-size: 20MB
+      max-request-size: 256MB
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+
+security:
+  jwt:
+    access-secret: ${JWT_ACCESS_SECRET:}
+    refresh-secret: ${JWT_REFRESH_SECRET:}
+    access-ttl: PT15M
+    refresh-ttl: P30D

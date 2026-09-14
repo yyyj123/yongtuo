@@ -1,0 +1,2 @@
+<script setup lang="ts">import type { Product } from '../model';defineProps<{model:Product}>()</script>
+<template><section class="surface"><h2>搜索引擎信息</h2><div class="form-grid"><template v-for="locale in ['Zh','En']" :key="locale"><label>{{locale==='Zh'?'中文标题':'English title'}}<input v-model="model['seoTitle'+locale]" maxlength="255"></label><label>{{locale==='Zh'?'中文描述':'English description'}}<textarea v-model="model['seoDescription'+locale]" rows="3" maxlength="500" /></label></template></div></section></template>

@@ -1,0 +1,15 @@
+<script setup lang="ts">
+import { ref } from 'vue'
+import { api } from '../auth/client'
+import {confirmAction} from '../../shared/confirm'
+import {previewImport,confirmImport,canConfirm,importMessages} from './workflow'
+const preview=ref<any>(null),result=ref<any>(null),file=ref<File>(),error=ref(''),busy=ref(false)
+function select(event:Event){file.value=(event.target as HTMLInputElement).files?.[0];preview.value=null;result.value=null;error.value=''}
+async function check(){if(!file.value)return;busy.value=true;error.value='';preview.value=null;result.value=null;try{preview.value=await previewImport(api,file.value)}catch(e){error.value=(e as Error).message}finally{busy.value=false}}
+async function confirm(){if(!canConfirm(preview.value)||busy.value)return;if(!await confirmAction(`确认导入 ${preview.value.total} 行产品？标为 PUBLISHED 的产品会公开展示。`,'确认导入','确认导入'))return;busy.value=true;error.value='';try{result.value=await confirmImport(api,preview.value);preview.value=null;file.value=undefined}catch(e){error.value=(e as Error).message}finally{busy.value=false}}
+async function template(){error.value='';try{const blob=await api.download('/products/import/template');const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='yongtuo-products-template.xlsx';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)}catch(e){error.value=(e as Error).message}}
+</script>
+<template><section><div class="page-heading"><div><h1>Excel 产品导入</h1><p class="muted">先检查，再确认。上传文件不会直接写入产品。</p></div><el-button @click="template">下载 Excel 模板</el-button></div><p v-if="error" role="alert" class="error">{{error}}</p>
+<section class="surface"><h2>选择文件并预检</h2><p class="muted">仅支持 .xlsx，最多 5 MB / 1000 行。分类标识可从分类管理中获取。</p><div class="toolbar"><label>Excel 文件<input type="file" accept=".xlsx" :disabled="busy" @change="select"></label><el-button type="primary" :disabled="!file" :loading="busy" @click="check">开始预检</el-button><RouterLink to="/categories">查看分类标识</RouterLink></div></section>
+<section v-if="preview" class="surface"><h2>预检结果，尚未导入</h2><p>共 {{preview.total}} 行 · 有效 {{preview.valid}} · 警告 {{preview.warning}} · 错误 {{preview.error}}</p><p v-if="preview.error" class="error">请修正错误后重新上传，当前不能确认导入。</p><div class="table-scroll"><table><thead><tr><th>Excel 行</th><th>产品编号</th><th>中文名</th><th>分类标识</th><th>检查结果</th></tr></thead><tbody><tr v-for="row in preview.rows" :key="row.rowNumber"><td>{{row.rowNumber}}</td><td>{{row.productCode}}</td><td>{{row.nameZh}}</td><td>{{row.categorySlug}}</td><td>{{row.messages.length?row.messages.map((m:string)=>importMessages[m]||m).join('；'):'通过'}}</td></tr></tbody></table></div><div class="actions"><el-button type="primary" :disabled="!canConfirm(preview)" :loading="busy" @click="confirm">确认导入 {{preview.total}} 行</el-button><el-button :disabled="busy" @click="preview=null">取消本次预检</el-button></div></section>
+<section v-if="result" class="surface" role="status"><h2>导入完成</h2><p>已导入 {{result.imported}} 个产品。</p><RouterLink to="/products">查看产品列表</RouterLink></section></section></template>

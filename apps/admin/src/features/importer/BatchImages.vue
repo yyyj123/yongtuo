@@ -1,0 +1,10 @@
+<script setup lang="ts">
+import {ref} from 'vue'
+import {api} from '../auth/client'
+const files=ref<File[]>([]),report=ref<any>(),busy=ref(false),error=ref('')
+const reasons:Record<string,string>={PRODUCT_NOT_FOUND:'找不到对应产品，请检查产品编号',INVALID_FILENAME:'文件名应为 产品编号-序号.jpg/png/webp',DUPLICATE_SEQUENCE:'本批次序号重复',SEQUENCE_ALREADY_EXISTS:'此图片序号已存在，请更换序号',INVALID_IMAGE:'图片格式、文件头或大小无效',STORAGE_UPLOAD_FAILED:'对象存储尚未配置或上传失败，请联系维护人员',BATCH_LIMIT_EXCEEDED:'超出100张或200 MB批次限制'}
+function select(event:Event){files.value=Array.from((event.target as HTMLInputElement).files||[]);report.value=null;error.value=''}
+async function upload(){if(!files.value.length||busy.value)return;busy.value=true;error.value='';try{const data=new FormData();files.value.forEach(f=>data.append('files',f));report.value=await api.post('/products/images/batch',data)}catch(e){error.value=(e as Error).message}finally{busy.value=false}}
+</script>
+<template><section><h1>批量上传产品图片</h1><p class="muted">按产品编号匹配，逐个文件报告处理结果。</p><form class="surface" @submit.prevent="upload"><h2>选择图片</h2><p>文件名格式：产品编号-序号.jpg（同样支持 PNG、WebP）。序号从 1 开始。</p><p class="muted small">最多100张，单张20 MB，合计200 MB。不会覆盖已有序号。</p><label>图片文件<input type="file" multiple accept="image/jpeg,image/png,image/webp" :disabled="busy" @change="select"></label><p>已选择 {{files.length}} 张图片</p><button type="submit" class="primary-link" :disabled="busy||!files.length">{{busy?'正在上传…':'上传并匹配产品'}}</button></form><p v-if="error" class="error" role="alert">{{error}}</p>
+<section v-if="report" class="surface"><h2>上传结果</h2><p role="status">共 {{report.total}} 张 · 成功 {{report.success}} · 失败 {{report.failed}} · 未匹配 {{report.unmatched}}</p><div class="table-scroll"><table><thead><tr><th>文件名</th><th>产品编号</th><th>结果</th><th>原因 / 下一步</th></tr></thead><tbody><tr v-for="(row,index) in report.files" :key="index"><td>{{row.fileName}}</td><td>{{row.productCode||'—'}}</td><td>{{row.status==='SUCCESS'?'成功':row.status==='UNMATCHED'?'未匹配':'失败'}}</td><td>{{row.reason?(reasons[row.reason]||row.reason):'已关联产品'}}</td></tr></tbody></table></div><p class="muted">仅成功项已保存。请修正失败或未匹配文件后重新选择上传。</p></section></section></template>

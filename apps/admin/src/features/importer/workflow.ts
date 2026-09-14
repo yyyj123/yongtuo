@@ -1,0 +1,5 @@
+import {api} from '../auth/client'
+export function canConfirm(preview:any){return Boolean(preview?.importToken&&preview.total>0&&preview.error===0)}
+export async function previewImport(client:Pick<typeof api,'post'>,file:File){const data=new FormData();data.append('file',file);return client.post('/products/import/preview',data)}
+export async function confirmImport(client:Pick<typeof api,'post'>,preview:any){if(!canConfirm(preview))throw new Error('请先修正全部错误并重新预检。');return client.post('/products/import/confirm',{importToken:preview.importToken})}
+export const importMessages:Record<string,string>={REQUIRED_PRODUCT_CODE:'缺少产品编号',REQUIRED_SLUG:'缺少网址标识',REQUIRED_CATEGORY_SLUG:'缺少分类标识',REQUIRED_NAME_ZH:'缺少中文名称',REQUIRED_STATUS:'缺少状态',INVALID_SLUG:'网址标识格式无效',DUPLICATE_PRODUCT_CODE:'文件内产品编号重复',DUPLICATE_SLUG:'文件内网址标识重复',PRODUCT_CODE_EXISTS:'产品编号已存在',PRODUCT_SLUG_EXISTS:'网址标识已存在',UNKNOWN_CATEGORY:'分类不存在',INVALID_STATUS:'状态须为 DRAFT、PUBLISHED 或 OFFLINE',PRODUCT_CODE_TOO_LONG:'产品编号过长',SLUG_TOO_LONG:'网址标识过长',NAME_ZH_TOO_LONG:'中文名称过长'}

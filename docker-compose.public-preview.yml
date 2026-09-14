@@ -1,0 +1,26 @@
+services:
+  gateway:
+    image: nginx:1.27.4-alpine
+    ports:
+      - "127.0.0.1:8086:80"
+    volumes:
+      - ./infra/nginx/public-preview.conf:/etc/nginx/nginx.conf:ro
+    networks: [preview]
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+  tunnel:
+    image: cloudflare/cloudflared@sha256:e39ee8da81ad5e05d77f38d2f51c60ca51bf2a8450ac3abab50c17fdb91d91bf
+    command: tunnel --no-autoupdate --protocol http2 --url http://gateway:80
+    networks: [preview]
+    depends_on: [gateway]
+    restart: unless-stopped
+    profiles: [public]
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+networks:
+  preview:
+    external: true
+    name: yongtuo-phase5_default

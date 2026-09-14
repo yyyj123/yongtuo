@@ -1,0 +1,69 @@
+import {chromium} from 'playwright'
+import assert from 'node:assert/strict'
+import {spawnSync} from 'node:child_process'
+import {randomBytes} from 'node:crypto'
+import {mkdirSync,writeFileSync,existsSync,readFileSync} from 'node:fs'
+import {fileURLToPath} from 'node:url'
+const root=fileURLToPath(new URL('../../../',import.meta.url)),base='http://127.0.0.1:18084',output='E:/Codex生成文件/预览/yongtuo-phase4'
+mkdirSync(output,{recursive:true})
+// Only the dedicated acceptance project is bootstrapped. Credentials live in memory.
+const statePath=root+'/.env.acceptance-auth.json',username='acceptance',password=existsSync(statePath)?JSON.parse(readFileSync(statePath,'utf8')).password:randomBytes(24).toString('base64url'),tag=Date.now().toString(36)
+if(!existsSync(statePath)){const bootstrap=spawnSync('docker',['compose','-p','yongtuo-phase4-test','-f','docker-compose.local.yml','-f','docker-compose.acceptance.yml','exec','-T','api','java','-Dloader.main=com.yongtuo.site.auth.AdminBootstrap','-cp','/app/app.jar','org.springframework.boot.loader.launch.PropertiesLauncher'],{cwd:root,input:`${username}\n${password}\n`,encoding:'utf8'})
+assert.equal(bootstrap.status,0,'Bootstrap must succeed on a fresh disposable test database');writeFileSync(statePath,JSON.stringify({password}),{mode:0o600})}
+let token=''
+async function api(path,method='GET',data){const response=await fetch(base+'/api/v1/admin'+path,{method,headers:{'Content-Type':'application/json',...(token?{Authorization:'Bearer '+token}:{})},body:data===undefined?undefined:JSON.stringify(data)});const body=await response.json();assert.ok(response.ok,`${method} ${path}: ${body.code} ${body.message}`);return body.data}
+token=(await api('/auth/login','POST',{username,password})).accessToken
+const category=await api('/categories','POST',{nameZh:'验收测试分类',slug:'acceptance-'+tag,categoryMode:'NORMAL',status:'ACTIVE',sortOrder:0,showOnHome:false})
+for(const [code,dataType] of [['text','TEXT'],['number','NUMBER'],['select','SELECT'],['multi','MULTI_SELECT']]){
+ const field=await api('/attributes','POST',{nameZh:'验收'+code,code:'a_'+tag+'_'+code,dataType,isGlobal:false,defaultRequired:false,defaultFilterable:false,status:'ACTIVE',sortOrder:0,options:['SELECT','MULTI_SELECT'].includes(dataType)?[{valueCode:'a',labelZh:'验收选项A',status:'ACTIVE',sortOrder:0},{valueCode:'b',labelZh:'验收选项B',status:'ACTIVE',sortOrder:1}]:[]})
+ await api(`/categories/${category.id}/attributes`,'PUT',[...(await api(`/categories/${category.id}/attributes`)).map(f=>({attributeId:f.attributeId,isRequired:false,isFilterable:false,showInDetail:true,sortOrder:0})),{attributeId:field.id,isRequired:false,isFilterable:false,showInDetail:true,sortOrder:0}])
+}
+const results=[]
+for(const channel of ['chrome','msedge']){
+ const browser=await chromium.launch({channel,headless:true}),context=await browser.newContext({viewport:{width:1440,height:1000}}),page=await context.newPage();page.setDefaultTimeout(15000)
+ results.push(channel+' version: '+browser.version());const runtimeErrors=[];page.on('pageerror',e=>runtimeErrors.push(e.message))
+ const step=msg=>{console.log(channel+': '+msg);results.push(channel+': '+msg)}
+ const visible=async text=>page.getByText(text,{exact:true}).first().waitFor()
+ const go=async path=>{await page.goto(base+'/manage'+path);await page.locator('h1').waitFor();await page.waitForLoadState('networkidle')}
+ const dialog=async label=>{await page.getByRole('dialog').getByRole('button',{name:label,exact:true}).click()}
+ try{
+ await go('/products');await page.waitForURL('**/manage/login?**');await page.getByLabel('用户名',{exact:true}).fill(username);await page.getByLabel('密码',{exact:true}).fill(password);await page.getByRole('button',{name:'登录',exact:true}).click();await page.waitForURL('**/manage/products');step('protected route and login')
+ await page.getByRole('link',{name:'新增产品',exact:true}).click();await page.getByLabel('产品编号',{exact:true}).fill('ACCEPT-'+channel+'-'+tag);await page.getByLabel('网址标识',{exact:false}).first().fill('accept-'+channel+'-'+tag);await page.getByLabel('产品分类',{exact:true}).selectOption(String(category.id));await page.getByLabel('中文名称',{exact:true}).fill('验收测试产品 '+channel)
+ await page.getByLabel('验收text',{exact:true}).fill('仅用于自动验收');await page.getByLabel('验收number',{exact:true}).fill('12.5');await page.getByLabel('验收select',{exact:true}).selectOption({label:'验收选项A'});await page.getByLabel('验收选项B',{exact:true}).check()
+ await page.getByRole('button',{name:'保存草稿',exact:true}).click();await page.waitForURL(/\/manage\/products\/\d+$/);await visible('产品已保存。');let id=Number(page.url().split('/').pop());let product=await api('/products/'+id);assert.equal(product.status,'DRAFT');assert.equal(product.attributes.length,4);step('product creation with four dynamic attribute types')
+ await page.getByRole('button',{name:'English',exact:true}).click();await page.getByLabel('English name',{exact:true}).fill('Synthetic acceptance '+channel);await page.getByRole('button',{name:'保存草稿',exact:true}).click();await page.waitForFunction(()=>document.querySelector('body').textContent.includes('AI 初稿 · 待确认'));await page.getByRole('button',{name:'标记为已确认',exact:true}).click();await dialog('标记为已确认');await page.waitForFunction(()=>document.querySelector('body').textContent.includes('英文：已确认'));assert.equal((await api('/products/'+id)).englishStatus,'CONFIRMED')
+ await page.getByRole('button',{name:'生成英文初稿',exact:true}).click();await dialog('取消');assert.equal((await api('/products/'+id)).englishStatus,'CONFIRMED');await page.getByRole('button',{name:'生成英文初稿',exact:true}).click();await dialog('覆盖并生成');await visible('此功能尚未配置服务，请联系维护人员完成配置。');step('manual English confirmation, overwrite cancellation and missing-provider message')
+ await page.getByRole('button',{name:'检查并发布',exact:true}).click();await dialog('确认发布');await visible('产品已保存。');assert.equal((await api('/products/'+id)).status,'PUBLISHED')
+ await page.getByLabel('English name',{exact:true}).fill('Unsaved acceptance');await page.getByRole('link',{name:'返回产品列表',exact:true}).click();await dialog('取消');assert.match(page.url(),new RegExp('/products/'+id+'$'));await page.getByRole('link',{name:'返回产品列表',exact:true}).click();await dialog('离开页面');await page.waitForURL('**/manage/products');step('explicit publication and unsaved-route cancellation')
+ const row=page.getByRole('row').filter({hasText:'ACCEPT-'+channel+'-'+tag});await row.getByRole('button',{name:'下架',exact:true}).click();await dialog('取消');assert.equal((await api('/products/'+id)).status,'PUBLISHED');await row.getByRole('button',{name:'下架',exact:true}).click();await dialog('确认下架');await visible('操作已保存。');assert.equal((await api('/products/'+id)).status,'OFFLINE');step('list status mutation and destructive cancellation')
+
+ // Add and persist one variant without relying on fixed product categories.
+ await go('/products/'+id);await page.getByRole('button',{name:'添加规格',exact:true}).click();const variant=page.locator('.variant-row');await variant.getByLabel('规格编号',{exact:true}).fill('V-'+channel+'-'+tag);await variant.getByLabel('中文名称',{exact:true}).fill('验收测试规格');await variant.getByLabel('验收number',{exact:true}).fill('8');await page.getByRole('button',{name:'保存草稿',exact:true}).click();await visible('产品已保存。');assert.equal((await api('/products/'+id)).variants.length,1);step('variant persistence');const emptyCategory=await api('/categories','POST',{nameZh:'验收空分类',slug:'empty-'+channel+'-'+tag,categoryMode:'NORMAL',status:'ACTIVE',sortOrder:0,showOnHome:false});await go('/products/'+id);await page.getByLabel('产品分类',{exact:true}).selectOption(String(emptyCategory.id));await dialog('取消');assert.equal(await page.getByLabel('产品分类',{exact:true}).inputValue(),String(category.id));step('category switch cancellation retains visible selection and values')
+ // Content modules use real writes, with clearly synthetic test facts.
+ const articleCategory=await api('/article-categories','POST',{nameZh:'验收文章分类',slug:'article-'+channel+'-'+tag,status:'ACTIVE',sortOrder:0})
+ for(const kind of ['articles','cases','certificates','catalogs']){
+  await go('/'+kind+'/new');if(['articles','cases'].includes(kind))await page.getByLabel('网址标识').fill(kind+'-'+channel+'-'+tag)
+  await page.getByLabel('中文标题 / 名称').fill('验收测试 '+kind+' '+channel+' '+tag)
+  if(kind==='articles')await page.getByLabel('文章分类',{exact:true}).selectOption(String(articleCategory.id))
+  if(kind==='certificates'){await page.getByLabel('证书 / 资料类型').fill('TEST_ONLY');await page.getByLabel('公开展示').check();assert.equal(await page.getByLabel('允许下载').isChecked(),false)}
+  if(kind==='catalogs'){await page.getByLabel('目录版本').fill('TEST-'+tag);await page.getByLabel('PDF 地址').fill('https://example.com/acceptance-only.pdf')}
+  else await page.getByRole('textbox',{name:'中文正文',exact:true}).fill('仅用于自动验收，不代表公司事实。')
+  if(kind==='cases'){await page.getByLabel('关联产品（可多选）').selectOption(String(id));await page.getByLabel('关联分类（可多选）').selectOption(String(category.id))}
+  await page.getByRole('button',{name:'保存草稿',exact:true}).click();await page.waitForURL(new RegExp('/manage/'+kind+'/[0-9]+$'));await visible('内容已保存。');const contentId=Number(page.url().split('/').pop());const saved=await api('/'+kind+'/'+contentId);assert.equal((saved.base||saved).status,'DRAFT');if(kind==='cases')assert.deepEqual(saved.productIds,[id]);if(kind==='certificates'){assert.equal(saved.isPublic,true);assert.equal(saved.allowDownload,false)}
+  if(kind==='catalogs'){await page.getByRole('button',{name:'发布内容',exact:true}).click();await dialog('确认发布');await visible('内容已保存。');await page.getByRole('link',{name:'返回产品目录',exact:true}).click();await page.getByRole('row').filter({hasText:'TEST-'+tag}).getByRole('button',{name:'设为主目录',exact:true}).click();await dialog('设为主目录');await visible('· 主目录')}
+ }
+ step('article, case relations, independent certificate permissions and primary catalog writes')
+ await go('/import');const download=page.waitForEvent('download');await page.getByRole('button',{name:'下载 Excel 模板',exact:true}).click();assert.equal((await download).suggestedFilename(),'yongtuo-products-template.xlsx')
+ const makeXlsx=(cat,code)=>{const py=spawnSync('python',[root+'/apps/admin/e2e/xlsx_fixture.py',code,code.toLowerCase(),cat,'DRAFT'],{encoding:'utf8'});assert.equal(py.status,0);return {name:'synthetic.xlsx',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',buffer:Buffer.from(py.stdout.trim(),'base64')}}
+ await page.getByLabel('Excel 文件').setInputFiles(makeXlsx('missing-category','BAD-'+channel+'-'+tag));await page.getByRole('button',{name:'开始预检',exact:true}).click();await visible('预检结果，尚未导入');assert.equal(await page.getByRole('button',{name:'确认导入 1 行',exact:true}).isEnabled(),false)
+ const importCode='IMPORT-'+channel+'-'+tag;await page.getByLabel('Excel 文件').setInputFiles(makeXlsx(category.slug,importCode));await page.getByRole('button',{name:'开始预检',exact:true}).click();await visible('预检结果，尚未导入');assert.equal((await api('/products')).filter(p=>p.productCode===importCode).length,0);await page.getByRole('button',{name:'确认导入 1 行',exact:true}).click();await dialog('确认导入');await visible('导入完成');assert.equal((await api('/products')).filter(p=>p.productCode===importCode).length,1);step('Excel template, blocking preview and explicit token confirmation')
+ await go('/products/'+id);await page.getByLabel('选择图片',{exact:false}).setInputFiles({name:'test.png',mimeType:'image/png',buffer:Buffer.concat([Buffer.from([137,80,78,71,13,10,26,10]),Buffer.alloc(2*1024*1024)])});await visible('此功能尚未配置服务，请联系维护人员完成配置。');step('2 MB upload reaches backend and reports unconfigured storage')
+ for(const route of ['/dashboard','/categories','/attributes','/articles','/cases','/certificates','/catalogs','/home','/pages','/contact','/site','/logs','/account','/import','/batch-images']){await go(route);await page.waitForTimeout(250);assert.equal(await page.locator('.error:visible').count(),0,'route '+route+' must load without API errors')}
+ step('all management routes load against live API')
+ await go('/dashboard');await page.screenshot({path:output+'/'+channel+'-dashboard.png',fullPage:true});await page.setViewportSize({width:390,height:844});await go('/products');await page.screenshot({path:output+'/'+channel+'-mobile-products.png',fullPage:true});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'mobile page has no horizontal overflow');step('desktop and mobile layout');const mobileRow=page.getByRole('row').filter({hasText:'ACCEPT-'+channel+'-'+tag});await mobileRow.getByRole('button',{name:'发布',exact:true}).click();await dialog('确认发布');await visible('操作已保存。');assert.equal((await api('/products/'+id)).status,'PUBLISHED');step('mobile publication action')
+ await page.setViewportSize({width:1440,height:1000});await go('/account');if(channel==='msedge'){const nextPassword=randomBytes(24).toString('base64url');await page.getByLabel('当前密码',{exact:true}).fill(password);await page.getByLabel('新密码',{exact:true}).fill(nextPassword);await page.getByLabel('再次输入新密码',{exact:true}).fill(nextPassword);await page.getByRole('button',{name:'修改密码并重新登录',exact:true}).click();await page.waitForURL('**/manage/login');writeFileSync(statePath,JSON.stringify({password:nextPassword}),{mode:0o600});assert.equal((await fetch(base+'/api/v1/admin/auth/me',{headers:{Authorization:'Bearer '+token}})).status,401);step('password change revokes existing access sessions')}
+ assert.deepEqual(runtimeErrors,[],'no uncaught browser errors')
+ }catch(e){await page.screenshot({path:output+'/'+channel+'-failure.png',fullPage:true});throw e}finally{await browser.close()}
+}
+writeFileSync(output+'/acceptance-results.json',JSON.stringify({date:new Date().toISOString(),results},null,2))
+console.log('PASS '+results.filter(r=>!r.includes(' version:')).length+' browser acceptance groups')
